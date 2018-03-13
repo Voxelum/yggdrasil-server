@@ -8,15 +8,19 @@ const req = request({
     },
     path: "/authenticate",
     port: 8080,
-})
+}, (res => {
+    res.on('data', (s) => {
+        console.log(s.toString())
+    })
+}))
 req.write(JSON.stringify({
     "agent": {                              // defaults to Minecraft
         "name": "Minecraft",                // For Mojang's other game Scrolls, "Scrolls" should be used
         "version": 1                        // This number might be increased
-                                            // by the vanilla client in the future
+        // by the vanilla client in the future
     },
     "username": "mojang account name",      // Can be an email address or player name for
-                                            // unmigrated accounts
+    // unmigrated accounts
     "password": "mojang account password",
     "clientToken": "client identifier",     // optional
     "requestUser": true                     // optional; default: false; true adds the user object to the response
