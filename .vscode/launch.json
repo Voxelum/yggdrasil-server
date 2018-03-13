@@ -13,7 +13,7 @@
                 "run-script",
                 "debug"
             ],
-            "port": 9229
+            "port": 8080
         }
     ]
 }
