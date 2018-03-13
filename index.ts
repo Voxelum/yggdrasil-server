@@ -52,7 +52,6 @@ app.post('/authenticate', (req, resp, next) => {
     })
 })
 function randomGeneration(){
-    random();
 }
 app.post('/refresh', (req, resp) => {
 
