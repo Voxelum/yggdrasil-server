@@ -16,11 +16,11 @@ var req = http_1.request({
 }));
 req.write(JSON.stringify({
     "agent": {
-        // "name": "Minecraft",                // For Mojang's other game Scrolls, "Scrolls" should be used
+        "name": "Minecraft",
         "version": 1 // This number might be increased
         // by the vanilla client in the future
     },
-    // "username": "mojang account name",      // Can be an email address or player name for
+    "username": "mojang account name",
     // unmigrated accounts
     "password": "mojang account password",
     "clientToken": "client identifier",
