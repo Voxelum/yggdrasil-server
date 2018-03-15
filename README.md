@@ -2,5 +2,7 @@
 
 A simple impl of ygg auth server.
 
-Reference: http://wiki.vg/Authentication
+Wiki: http://wiki.vg/Authentication
+
+Java Impl (Much powerful, supporting profile and session): https://github.com/to2mbn/yggdrasil-mock
 
