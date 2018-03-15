@@ -26,12 +26,13 @@ export interface User {
     properties: { [key: string]: string },
 }
 
-export interface TokenServer {
-    grantAccessToken(user: User, clientToken: string): Promise<string>
-    getProfileFromToken(accessToken: string): Promise<string>
-    revokeAccessToken(accessToken: string): Promise<string>
+export interface AccessTokenServer {
+    grant(user: User, clientToken: string): Promise<string>
+    getProfile(accessToken: string, clientToken: string): Promise<string>
 
-    genClientToken(user: User): Promise<string>
+    validate(accessToken: string, clientToken: string): Promise<boolean>
+    invalidate(accessToken: string, clientToken: string): Promise<void>
+    invalidateByPassword(username: string, password: string): Promise<void>
 }
 
 class Agent {
@@ -65,7 +66,7 @@ class AuthenticateRequest {
     }
 }
 
-export function create(db: UserDBridge, tokens: TokenServer, middleware: PasswordMiddleware): Express.Application {
+export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
     app.use(express.json());
 
@@ -80,17 +81,17 @@ export function create(db: UserDBridge, tokens: TokenServer, middleware: Passwor
             error: 'ForbiddenOperationException',
             errorMessage: 'Invalid credentials. Invalid username or password.'
         };
-        const clientToken = req.clientToken || await tokens.genClientToken(usr);
-        const accessToken = await tokens.grantAccessToken(usr, clientToken);
+        const clientToken = req.clientToken || v4(); // await tokens.genClientToken(usr);
+        const accessToken = await tokens.grant(usr, clientToken);
 
         const respObj: any = {
             clientToken,
-            accessToken: await tokens.grantAccessToken(usr, clientToken),
+            accessToken,
         };
 
         if (req.agent) { // emmmmmm
             respObj.availableProfiles = usr.availableProfiles;
-            const targetId = await tokens.getProfileFromToken(accessToken);
+            const targetId = await tokens.getProfile(accessToken, clientToken);
             respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === targetId)
         }
         if (req.requestUser) {
