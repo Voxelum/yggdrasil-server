@@ -1,7 +1,7 @@
 import express from 'express'
 import { v4 } from 'uuid'
 import 'reflect-metadata'
-import { Require, Optional, parse } from './parse.body'
+import { Require, Optional, parse, Type } from './parse.body'
 
 export interface PasswordMiddleware {
     process(password: string): Promise<string>;
@@ -42,7 +42,7 @@ export interface AccessTokenServer {
     getUser(accessToken: string, clientToken: string): Promise<string>
 
     validate(accessToken: string, clientToken?: string): Promise<boolean>
-    invalidate(accessToken: string, clientToken: string): Promise<void>
+    invalidate(accessToken: string, clientToken?: string): Promise<void>
     invalidateByPassword(username: string, password: string): Promise<void>
 }
 
@@ -76,8 +76,6 @@ class AuthenticateRequest {
         this.agent = new Agent(object.agent);
     }
 }
-
-
 class RefreshRequest {
     @Require()
     accessToken: string
@@ -98,8 +96,8 @@ class RefreshRequest {
 }
 
 class ValidateRequest {
-    @Require()
-    accessToken: string
+    @Optional()
+    accessToken?: string
     @Optional()
     clientToken?: string
 
@@ -107,17 +105,52 @@ class ValidateRequest {
         this.accessToken = object.accessToken;
         this.clientToken = object.clientToken;
     }
-
 }
+
 export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
+    app.use((req, resp, next) => {
+        if (req.header('Content-Type') !== 'application/json') {
+            resp.status(400);
+            resp.send({
+                error: 'Unsupported Media Type',
+                errorMessage: 'The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method'
+            })
+        }
+    })
     app.use(express.json());
 
-    async function authenticate(req?: AuthenticateRequest) {
-        if (!req) throw {
-            "error": "Unsupported Media Type",
-            "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
-        };
+    app.get("*", (req, resp) => {
+        resp.status(400);
+        resp.send({
+            error: 'Method Not Allowed',
+            errorMessage: 'The method specified in the request is not allowed for the resource identified by the request URI',
+        })
+    })
+
+    function handle<T>(handler: (req: T) => Promise<{ status: number, body: any }>, reqType: Type<T>) {
+        app.post(`/${handler.name}`, (req, resp) => {
+            const reqObj = parse(req.body, reqType);
+            if (!reqObj) {
+                resp.status(300).send({
+                    "error": "Unsupported Media Type",
+                    "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+                })
+                return;
+            }
+            handler(reqObj).then(r => {
+                resp.status(r.status)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(r.body);
+            }).catch(e => {
+                resp.status(e.status)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(e.body);
+            })
+        })
+    }
+
+    async function authenticate(req: AuthenticateRequest) {
         const usr = await db.findUserByName(req.username);
         const decrp = await middleware.process(req.password);
         if (usr.password !== decrp) throw {
@@ -143,28 +176,10 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
                 properties: usr.properties
             }
         }
-        return respObj;
+        return { status: 200, body: respObj };
     }
-    app.post('/authenticate', (req, resp) => {
-        authenticate(parse(req.body, AuthenticateRequest))
-            .then(r => {
-                resp.status(200)
-                    .contentType('application/json;charset=UTF-8')
-                    .send(r);
-            })
-            .catch(e => {
-                resp.status(302)
-                    .contentType('application/json;charset=UTF-8')
-                    .send(e);
-            })
-    })
 
-
-    async function refresh(req?: RefreshRequest) {
-        if (!req) throw {
-            "error": "Unsupported Media Type",
-            "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
-        }
+    async function refresh(req: RefreshRequest) {
         if (!(await tokens.validate(req.accessToken, req.clientToken))) throw {
             error: 'ForbiddenOperationException',
             errorMessage: 'Invalid token.'
@@ -188,52 +203,56 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
                 properties: usr.properties
             }
         }
-        return req;
+        return { status: 200, body: respObj };
     }
 
-
-    app.post('/refresh', (req, resp) => {
-        refresh(parse(req.body, RefreshRequest))
-            .then(r => {
-                resp.status(200)
-                    .contentType('application/json;charset=UTF-8')
-                    .send(r);
-            })
-            .catch(e => {
-                resp.status(302)
-                    .contentType('application/json;charset=UTF-8')
-                    .send(e);
-            })
-    })
-
-    async function validate(req?: ValidateRequest) {
-        if (!req) throw {
-            "error": "Unsupported Media Type",
-            "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+    async function validate(req: ValidateRequest) {
+        if (!req.accessToken) throw {
+            status: 400,
+            body: {
+                error: "IllegalArgumentException",
+                errorMessage: "credentials is null"
+            }
         }
         if (await tokens.validate(req.accessToken, req.clientToken))
-            return {}
-        else {
-            throw {
+            return { status: 304, body: {} }
+        else throw {
+            status: 400,
+            body: {
                 "error": "ForbiddenOperationException",
                 errorMessage: "Invalid token.",
             }
         }
     }
 
-    app.post('/validate', (req, resp) => {
+    async function invalidate(req: ValidateRequest) {
+        if (!req.accessToken) throw {
+            status: 400,
+            body: {
+                error: "IllegalArgumentException",
+                errorMessage: "credentials is null"
+            }
+        }
+        await tokens.invalidate(req.accessToken, req.clientToken)
+        return { status: 304, body: {} }
+    }
 
-
-    })
+    handle(authenticate, AuthenticateRequest);
+    handle(refresh, RefreshRequest);
+    handle(validate, ValidateRequest)
+    handle(invalidate, ValidateRequest);
 
     app.post('/signout', (req, resp) => {
 
     })
 
-    app.post('/invalidate', (req, resp) => {
-
+    app.post('*', (req, resp) => {
+        resp.status(400)
+        resp.send({
+            error: 'Not Found',
+            errorMessage: 'The server has not found anything matching the request URI'
+        })
     })
-
     return app;
 }
 
