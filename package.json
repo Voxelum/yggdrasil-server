@@ -1,33 +1,33 @@
 {
-  "name": "yggdrasil-server",
-  "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
-  "types": "src/index.ts",
-  "scripts": {
-    "build": "tsc",
-    "test": "tsc && node ./dist/test.server.js",
-    "test-client": "tsc && node ./dist/test.client.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/CIJHN/yggdrasil-server.git"
-  },
-  "author": "",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/CIJHN/yggdrasil-server/issues"
-  },
-  "homepage": "https://github.com/CIJHN/yggdrasil-server#readme",
-  "devDependencies": {
-    "@types/express": "^4.11.1",
-    "@types/uuid": "^3.4.3",
-    "@types/node": "^9.4.7",
-    "typescript": "^2.7.2",
-    "reflect-metadata": "^0.1.12"
-  },
-  "dependencies": {
-    "express": "^4.16.3",
-    "uuid": "^3.2.1"
-  }
+    "name": "yggdrasil-server",
+    "version": "0.0.1",
+    "description": "A toy yggdrasil authorization server.",
+    "main": "dist/index.js",
+    "types": "src/index.ts",
+    "scripts": {
+        "build": "tsc",
+        "test": "tsc && node ./dist/test.server.js",
+        "test-client": "tsc && node ./dist/test.client.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/CIJHN/yggdrasil-server.git"
+    },
+    "author": "cijhn@hotmail.com",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/CIJHN/yggdrasil-server/issues"
+    },
+    "homepage": "https://github.com/CIJHN/yggdrasil-server#readme",
+    "devDependencies": {
+        "@types/express": "^4.11.1",
+        "@types/uuid": "^3.4.3",
+        "@types/node": "^9.4.7",
+        "typescript": "^2.7.2",
+        "reflect-metadata": "^0.1.12"
+    },
+    "dependencies": {
+        "express": "^4.16.3",
+        "uuid": "^3.2.1"
+    }
 }
