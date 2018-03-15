@@ -1,6 +1,9 @@
 import { User, GameProfile, AccessTokenServer } from ".";
 
 export class SimpleAccessTokenServer implements AccessTokenServer {
+    getUser(accessToken: string, clientToken: string): Promise<string> {
+        throw new Error("Method not implemented.");
+    }
     grant(user: User, clientToken: string): Promise<string> {
         throw new Error("Method not implemented.");
     }

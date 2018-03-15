@@ -96,8 +96,8 @@ class RefreshRequest {
 }
 
 class ValidateRequest {
-    @Optional()
-    accessToken?: string
+    @Require()
+    accessToken: string
     @Optional()
     clientToken?: string
 
@@ -107,34 +107,48 @@ class ValidateRequest {
     }
 }
 
+class SignoutRequest {
+    @Require()
+    username: string
+    @Require()
+    password: string
+
+    constructor(object: any) {
+        this.username = object.username;
+        this.password = object.password;
+    }
+
+}
 export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
     app.use((req, resp, next) => {
         if (req.header('Content-Type') !== 'application/json') {
-            resp.status(400);
-            resp.send({
-                error: 'Unsupported Media Type',
-                errorMessage: 'The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method'
-            })
+            resp.status(400)
+                .contentType('application/json;charset=UTF-8')
+                .send({
+                    error: 'Unsupported Media Type',
+                    errorMessage: 'The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method'
+                })
         }
     })
     app.use(express.json());
 
     app.get("*", (req, resp) => {
-        resp.status(400);
-        resp.send({
-            error: 'Method Not Allowed',
-            errorMessage: 'The method specified in the request is not allowed for the resource identified by the request URI',
-        })
+        resp.status(400)
+            .contentType('application/json;charset=UTF-8')
+            .send({
+                error: 'Method Not Allowed',
+                errorMessage: 'The method specified in the request is not allowed for the resource identified by the request URI',
+            })
     })
 
     function handle<T>(handler: (req: T) => Promise<{ status: number, body: any }>, reqType: Type<T>) {
         app.post(`/${handler.name}`, (req, resp) => {
             const reqObj = parse(req.body, reqType);
             if (!reqObj) {
-                resp.status(300).send({
-                    "error": "Unsupported Media Type",
-                    "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+                resp.status(400).send({
+                    error: "IllegalArgumentException",
+                    errorMessage: "credentials is null"
                 })
                 return;
             }
@@ -207,13 +221,6 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     }
 
     async function validate(req: ValidateRequest) {
-        if (!req.accessToken) throw {
-            status: 400,
-            body: {
-                error: "IllegalArgumentException",
-                errorMessage: "credentials is null"
-            }
-        }
         if (await tokens.validate(req.accessToken, req.clientToken))
             return { status: 304, body: {} }
         else throw {
@@ -226,25 +233,19 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     }
 
     async function invalidate(req: ValidateRequest) {
-        if (!req.accessToken) throw {
-            status: 400,
-            body: {
-                error: "IllegalArgumentException",
-                errorMessage: "credentials is null"
-            }
-        }
         await tokens.invalidate(req.accessToken, req.clientToken)
         return { status: 304, body: {} }
     }
 
+    async function signout(req: SignoutRequest) {
+        await tokens.invalidateByPassword(req.username, req.password)
+        return { status: 304, body: {} }
+    }
     handle(authenticate, AuthenticateRequest);
     handle(refresh, RefreshRequest);
     handle(validate, ValidateRequest)
     handle(invalidate, ValidateRequest);
-
-    app.post('/signout', (req, resp) => {
-
-    })
+    handle(signout, SignoutRequest);
 
     app.post('*', (req, resp) => {
         resp.status(400)
