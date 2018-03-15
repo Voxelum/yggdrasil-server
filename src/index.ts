@@ -109,6 +109,21 @@ class ValidateRequest {
     }
 
 }
+
+class SignoutRequest {
+    @Require()
+    username: string
+    @Require()
+    password: string
+    @Require()
+    accessToken: string
+
+    constructor(object: any) {
+        this.username = object.username;
+        this.password = object.password;
+    }
+
+}
 export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
     app.use(express.json());
@@ -222,12 +237,48 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     }
 
     app.post('/validate', (req, resp) => {
+        validate(parse(req.body, ValidateRequest))
+            .then(r => {
+                resp.status(200)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(r);
+            })
+            .catch(e => {
+                resp.status(302)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(e);
+            })
+        })
+
+        async function signout(req?: SignoutRequest) {
+            if (!req) throw {
+                "error": "Unsupported Media Type",
+                "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+            }
+            const usr = await db.findUserByName(req.username);
+            const decrp = await middleware.process(req.password);
+            if (usr.password !== decrp) throw {
+                error: 'ForbiddenOperationException',
+                errorMessage: 'Invalid credentials. Invalid username or password.'
+            }
+        }
 
 
-    })
 
     app.post('/signout', (req, resp) => {
-
+        signout(parse(req.body, SignoutRequest))
+        .then(r => {
+            resp.status(200)
+                .contentType('application/json;charset=UTF-8')
+                .send(r);
+        })
+        .catch(e => {
+            resp.status(302)
+                .contentType('application/json;charset=UTF-8')
+                .send(e);
+        })
+})
+            
     })
 
     app.post('/invalidate', (req, resp) => {
