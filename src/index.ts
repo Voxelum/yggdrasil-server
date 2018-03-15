@@ -12,10 +12,19 @@ export interface UserDBridge {
     findUserById(id: string): Promise<User>;
 }
 
-export interface GameProfile {
-    id: string,
-    name: string,
-    legacy: boolean,
+export class GameProfile {
+    @Require()
+    id: string
+    @Require()
+    name: string
+    @Optional()
+    legacy?: boolean
+
+    constructor(object: any) {
+        this.id = object.id;
+        this.name = object.name;
+        this.legacy = object.legacy;
+    }
 }
 export interface User {
     id: string,
@@ -28,9 +37,11 @@ export interface User {
 
 export interface AccessTokenServer {
     grant(user: User, clientToken: string): Promise<string>
-    getProfile(accessToken: string, clientToken: string): Promise<string>
 
-    validate(accessToken: string, clientToken: string): Promise<boolean>
+    getProfile(accessToken: string, clientToken: string): Promise<string | undefined>
+    getUser(accessToken: string, clientToken: string): Promise<string>
+
+    validate(accessToken: string, clientToken?: string): Promise<boolean>
     invalidate(accessToken: string, clientToken: string): Promise<void>
     invalidateByPassword(username: string, password: string): Promise<void>
 }
@@ -66,6 +77,38 @@ class AuthenticateRequest {
     }
 }
 
+
+class RefreshRequest {
+    @Require()
+    accessToken: string
+    @Require()
+    clientToken: string
+    @Optional()
+    selectedProfile?: GameProfile
+    @Optional()
+    requestUser?: boolean
+
+    constructor(object: any) {
+        this.accessToken = object.accessToken;
+        this.clientToken = object.clientToken;
+        this.selectedProfile = new GameProfile(object.selectedProfile);
+        this.requestUser = object.requestUser;
+
+    }
+}
+
+class ValidateRequest {
+    @Require()
+    accessToken: string
+    @Optional()
+    clientToken?: string
+
+    constructor(object: any) {
+        this.accessToken = object.accessToken;
+        this.clientToken = object.clientToken;
+    }
+
+}
 export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
     app.use(express.json());
@@ -116,11 +159,70 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
             })
     })
 
-    app.post('/refresh', (req, resp) => {
 
+    async function refresh(req?: RefreshRequest) {
+        if (!req) throw {
+            "error": "Unsupported Media Type",
+            "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+        }
+        if (!(await tokens.validate(req.accessToken, req.clientToken))) throw {
+            error: 'ForbiddenOperationException',
+            errorMessage: 'Invalid token.'
+        }
+        const usr = await db.findUserById(await tokens.getUser(req.accessToken, req.clientToken));
+        const accessToken = await tokens.grant(usr, req.clientToken);
+        tokens.invalidate(req.accessToken, req.clientToken);
+
+
+        const respObj: any = {
+            clientToken: req.clientToken,
+            accessToken,
+        };
+
+        if (usr.selectedProfile) {
+            respObj.selectedProfile = usr.selectedProfile;
+        }
+        if (req.requestUser) {
+            respObj.user = {
+                id: usr.id,
+                properties: usr.properties
+            }
+        }
+        return req;
+    }
+
+
+    app.post('/refresh', (req, resp) => {
+        refresh(parse(req.body, RefreshRequest))
+            .then(r => {
+                resp.status(200)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(r);
+            })
+            .catch(e => {
+                resp.status(302)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(e);
+            })
     })
 
+    async function validate(req?: ValidateRequest) {
+        if (!req) throw {
+            "error": "Unsupported Media Type",
+            "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
+        }
+        if (await tokens.validate(req.accessToken, req.clientToken))
+            return {}
+        else {
+            throw {
+                "error": "ForbiddenOperationException",
+                errorMessage: "Invalid token.",
+            }
+        }
+    }
+
     app.post('/validate', (req, resp) => {
+
 
     })
 
