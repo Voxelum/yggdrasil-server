@@ -1,9 +1,38 @@
 import express from 'express'
 import { v4 } from 'uuid'
-import { PasswordMiddleware, UserDBridge, User } from '.'
 import 'reflect-metadata'
 import { Require, Optional, parse } from './parse.body'
-import { grantAccessToken, genClientToken, getProfileForToken } from './tokens'
+
+export interface PasswordMiddleware {
+    process(password: string): Promise<string>;
+}
+
+export interface UserDBridge {
+    findUserByName(username: string): Promise<User>;
+    findUserById(id: string): Promise<User>;
+}
+
+export interface GameProfile {
+    id: string,
+    name: string,
+    legacy: boolean,
+}
+export interface User {
+    id: string,
+    username: string,
+    password: string,
+    availableProfiles: GameProfile[],
+    selectedProfile: GameProfile,
+    properties: { [key: string]: string },
+}
+
+export interface TokenServer {
+    grantAccessToken(user: User, clientToken: string): Promise<string>
+    getProfileFromToken(accessToken: string): Promise<string>
+    revokeAccessToken(accessToken: string): Promise<string>
+
+    genClientToken(user: User): Promise<string>
+}
 
 class Agent {
     @Require()
@@ -36,8 +65,7 @@ class AuthenticateRequest {
     }
 }
 
-
-export function create(db: UserDBridge, middleware: PasswordMiddleware): Express.Application {
+export function create(db: UserDBridge, tokens: TokenServer, middleware: PasswordMiddleware): Express.Application {
     const app = express();
     app.use(express.json());
 
@@ -52,17 +80,18 @@ export function create(db: UserDBridge, middleware: PasswordMiddleware): Express
             error: 'ForbiddenOperationException',
             errorMessage: 'Invalid credentials. Invalid username or password.'
         };
-        const clientToken = req.clientToken || genClientToken(usr);
-        const accessToken = grantAccessToken(usr, clientToken);
+        const clientToken = req.clientToken || await tokens.genClientToken(usr);
+        const accessToken = await tokens.grantAccessToken(usr, clientToken);
 
         const respObj: any = {
             clientToken,
-            accessToken: grantAccessToken(usr, clientToken),
+            accessToken: await tokens.grantAccessToken(usr, clientToken),
         };
 
         if (req.agent) { // emmmmmm
             respObj.availableProfiles = usr.availableProfiles;
-            respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === getProfileForToken(accessToken))
+            const targetId = await tokens.getProfileFromToken(accessToken);
+            respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === targetId)
         }
         if (req.requestUser) {
             respObj.user = {
@@ -75,17 +104,17 @@ export function create(db: UserDBridge, middleware: PasswordMiddleware): Express
     app.post('/authenticate', (req, resp) => {
         authenticate(parse(req.body, AuthenticateRequest))
             .then(r => {
-                resp.status(200);
-                resp.contentType('application/json;charset=UTF-8');
-                resp.send(r);
+                resp.status(200)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(r);
             })
             .catch(e => {
-                resp.status(302);
-                resp.contentType('application/json;charset=UTF-8');
-                resp.send(e);
+                resp.status(302)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(e);
             })
     })
-    
+
     app.post('/refresh', (req, resp) => {
 
     })
@@ -106,5 +135,4 @@ export function create(db: UserDBridge, middleware: PasswordMiddleware): Express
 }
 
 
-export * from './user'
 

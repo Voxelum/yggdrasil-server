@@ -1,9 +1,8 @@
 import { User, GameProfile } from ".";
 
-export interface TokenServer {
-    grantAccessToken(user: User, clientToken: string): string
-    genClientToken(user: User): string
-    getProfileForToken(accessToken: string): string
+
+export function createTokenServer() {
+
 }
 export function grantAccessToken(user: User, clientToken: string): string {
     return ''

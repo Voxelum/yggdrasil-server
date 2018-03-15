@@ -1,23 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import { PasswordMiddleware } from '.'
 
-export interface GameProfile {
-    id: string,
-    name: string,
-    legacy: boolean,
-}
-export interface User {
-    id: string,
-    email: string,
-    password: string,
-    availableProfiles: GameProfile[],
-    selectedProfile: GameProfile,
-    properties: { [key: string]: string },
-}
-
-export interface PasswordMiddleware {
-    process(password: string): Promise<string>;
-}
 export class None implements PasswordMiddleware {
     process(provided: string): Promise<string> {
         return Promise.resolve(provided);
@@ -59,9 +43,3 @@ export class FileRSA extends RSA {
         });
     }
 }
-export interface UserDBridge {
-    findUserByName(username: string): Promise<User>;
-    findUserById(id: string): Promise<User>;
-}
-
-
