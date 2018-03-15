@@ -8,7 +8,7 @@ export interface PasswordMiddleware {
 }
 
 export interface UserDBridge {
-    findUserByName(username: string): Promise<User>;
+    findUserByName(username: string): Promise<User | undefined>;
     findUserById(id: string): Promise<User>;
 }
 
@@ -35,15 +35,19 @@ export interface User {
     properties: { [key: string]: string },
 }
 
+export interface Token {
+    accessToken: string
+    clientToken: string
+    userId: string
+    selectedProfile: string
+}
+
 export interface AccessTokenServer {
-    grant(user: User, clientToken: string): Promise<string>
+    grant(user: User, clientToken: string): Promise<Token>
+    validate(accessToken: string, clientToken?: string): Promise<Token | undefined>
 
-    getProfile(accessToken: string, clientToken: string): Promise<string | undefined>
-    getUser(accessToken: string, clientToken: string): Promise<string>
-
-    validate(accessToken: string, clientToken?: string): Promise<boolean>
     invalidate(accessToken: string, clientToken?: string): Promise<void>
-    invalidateByPassword(username: string, password: string): Promise<void>
+    invalidateUser(userId: string): Promise<void>
 }
 
 class Agent {
@@ -166,23 +170,21 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
 
     async function authenticate(req: AuthenticateRequest) {
         const usr = await db.findUserByName(req.username);
-        const decrp = await middleware.process(req.password);
-        if (usr.password !== decrp) throw {
+        if (!usr || usr.password !== await middleware.process(req.password)) throw {
             error: 'ForbiddenOperationException',
             errorMessage: 'Invalid credentials. Invalid username or password.'
         };
         const clientToken = req.clientToken || v4(); // await tokens.genClientToken(usr);
-        const accessToken = await tokens.grant(usr, clientToken);
+        const token = await tokens.grant(usr, clientToken);
 
         const respObj: any = {
             clientToken,
-            accessToken,
+            accessToken: token.accessToken,
         };
 
         if (req.agent) { // emmmmmm
             respObj.availableProfiles = usr.availableProfiles;
-            const targetId = await tokens.getProfile(accessToken, clientToken);
-            respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === targetId)
+            respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === token.selectedProfile)
         }
         if (req.requestUser) {
             respObj.user = {
@@ -194,14 +196,14 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     }
 
     async function refresh(req: RefreshRequest) {
-        if (!(await tokens.validate(req.accessToken, req.clientToken))) throw {
+        const token = await tokens.validate(req.accessToken, req.clientToken);
+        if (!token) throw {
             error: 'ForbiddenOperationException',
             errorMessage: 'Invalid token.'
         }
-        const usr = await db.findUserById(await tokens.getUser(req.accessToken, req.clientToken));
+        const usr = await db.findUserById(token.userId);
         const accessToken = await tokens.grant(usr, req.clientToken);
         tokens.invalidate(req.accessToken, req.clientToken);
-
 
         const respObj: any = {
             clientToken: req.clientToken,
@@ -238,9 +240,16 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     }
 
     async function signout(req: SignoutRequest) {
-        await tokens.invalidateByPassword(req.username, req.password)
+        const usr = await db.findUserByName(req.username);
+        if (!usr || usr.password != await middleware.process(req.password)) throw {
+            error: 'ForbiddenOperationException',
+            errorMessage: 'Invalid credentials. Invalid username or password.'
+        }
+
+        await tokens.invalidateUser(usr.id);
         return { status: 304, body: {} }
     }
+
     handle(authenticate, AuthenticateRequest);
     handle(refresh, RefreshRequest);
     handle(validate, ValidateRequest)

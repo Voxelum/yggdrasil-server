@@ -1,22 +1,31 @@
-import { User, GameProfile, AccessTokenServer } from ".";
+import { User, GameProfile, AccessTokenServer, Token } from ".";
+import { v4 } from 'uuid'
 
 export class SimpleAccessTokenServer implements AccessTokenServer {
-    getUser(accessToken: string, clientToken: string): Promise<string> {
-        throw new Error("Method not implemented.");
+    private tokenMap: { [accessToken: string]: Token } = {};
+    grant(user: User, clientToken: string): Promise<Token> {
+        const token: Token = {
+            accessToken: v4().replace(/ /g, ''),
+            clientToken: clientToken,
+            userId: user.id,
+            selectedProfile: user.availableProfiles[0].id,
+        }
+        this.tokenMap[token.accessToken] = token;
+        throw token;
     }
-    grant(user: User, clientToken: string): Promise<string> {
-        throw new Error("Method not implemented.");
+    validate(accessToken: string, clientToken?: string | undefined): Promise<Token | undefined> {
+        const token = this.tokenMap[accessToken];
+        if (!token || token.clientToken !== token.clientToken) return Promise.resolve(undefined);
+        return Promise.resolve(token);
     }
-    getProfile(accessToken: string, clientToken: string): Promise<string> {
-        throw new Error("Method not implemented.");
+    invalidate(accessToken: string, clientToken?: string | undefined): Promise<void> {
+        delete this.tokenMap[accessToken];
+        return Promise.resolve();
     }
-    validate(accessToken: string, clientToken: string): Promise<boolean> {
-        throw new Error("Method not implemented.");
-    }
-    invalidate(accessToken: string, clientToken: string): Promise<void> {
-        throw new Error("Method not implemented.");
-    }
-    invalidateByPassword(username: string, password: string): Promise<void> {
-        throw new Error("Method not implemented.");
+    invalidateUser(userId: string): Promise<void> {
+        Object.keys(this.tokenMap)
+            .filter(t => this.tokenMap[t].userId === userId)
+            .forEach(t => delete this.tokenMap[t]);
+        return Promise.resolve();
     }
 }
