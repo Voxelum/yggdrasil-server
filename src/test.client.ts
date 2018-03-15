@@ -12,6 +12,9 @@ const req = request({
     res.on('data', (s) => {
         console.log(s.toString())
     })
+    res.on('error', (e) => {
+        console.error(e)
+    })
 }))
 req.write(JSON.stringify({
     "agent": {                              // defaults to Minecraft
@@ -19,10 +22,10 @@ req.write(JSON.stringify({
         "version": 1                        // This number might be increased
         // by the vanilla client in the future
     },
-    "username": "mojang account name",      // Can be an email address or player name for
+    "username": "ci010",      // Can be an email address or player name for
     // unmigrated accounts
-    "password": "mojang account password",
-    "clientToken": "client identifier",     // optional
+    "password": "pass",
+    "clientToken": "123",     // optional
     "requestUser": true                     // optional; default: false; true adds the user object to the response
 }))
 req.end()

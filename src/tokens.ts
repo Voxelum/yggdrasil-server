@@ -11,11 +11,11 @@ export class SimpleAccessTokenServer implements AccessTokenServer {
             selectedProfile: user.availableProfiles[0].id,
         }
         this.tokenMap[token.accessToken] = token;
-        throw token;
+        return Promise.resolve(token);
     }
     validate(accessToken: string, clientToken?: string | undefined): Promise<Token | undefined> {
         const token = this.tokenMap[accessToken];
-        if (!token || token.clientToken !== token.clientToken) return Promise.resolve(undefined);
+        if (!token || (clientToken && token.clientToken !== token.clientToken)) return Promise.resolve(undefined);
         return Promise.resolve(token);
     }
     invalidate(accessToken: string, clientToken?: string | undefined): Promise<void> {

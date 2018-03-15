@@ -12,6 +12,12 @@ export interface UserDBridge {
     findUserById(id: string): Promise<User>;
 }
 
+// export interface GameProfile {
+//     id: string
+//     name: string
+//     legacy?: boolean
+// }
+
 export class GameProfile {
     @Require()
     id: string
@@ -31,7 +37,6 @@ export interface User {
     username: string,
     password: string,
     availableProfiles: GameProfile[],
-    selectedProfile: GameProfile,
     properties: { [key: string]: string },
 }
 
@@ -123,7 +128,7 @@ class SignoutRequest {
     }
 
 }
-export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): Express.Application {
+export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: PasswordMiddleware): express.Application {
     const app = express();
     app.use((req, resp, next) => {
         if (req.header('Content-Type') !== 'application/json') {
@@ -134,6 +139,7 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
                     errorMessage: 'The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method'
                 })
         }
+        next()
     })
     app.use(express.json());
 
@@ -157,10 +163,12 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
                 return;
             }
             handler(reqObj).then(r => {
+                console.log(r)
                 resp.status(r.status)
                     .contentType('application/json;charset=UTF-8')
                     .send(r.body);
             }).catch(e => {
+                console.error(e)
                 resp.status(e.status)
                     .contentType('application/json;charset=UTF-8')
                     .send(e.body);
@@ -171,12 +179,15 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     async function authenticate(req: AuthenticateRequest) {
         const usr = await db.findUserByName(req.username);
         if (!usr || usr.password !== await middleware.process(req.password)) throw {
-            error: 'ForbiddenOperationException',
-            errorMessage: 'Invalid credentials. Invalid username or password.'
+            status: 400,
+            body: {
+                error: 'ForbiddenOperationException',
+                errorMessage: 'Invalid credentials. Invalid username or password.'
+            }
         };
-        const clientToken = req.clientToken || v4(); // await tokens.genClientToken(usr);
+        const clientToken = req.clientToken || v4(); 
         const token = await tokens.grant(usr, clientToken);
-
+        
         const respObj: any = {
             clientToken,
             accessToken: token.accessToken,
@@ -198,20 +209,23 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     async function refresh(req: RefreshRequest) {
         const token = await tokens.validate(req.accessToken, req.clientToken);
         if (!token) throw {
-            error: 'ForbiddenOperationException',
-            errorMessage: 'Invalid token.'
+            status: 400,
+            body: {
+                error: 'ForbiddenOperationException',
+                errorMessage: 'Invalid token.'
+            }
         }
         const usr = await db.findUserById(token.userId);
-        const accessToken = await tokens.grant(usr, req.clientToken);
+        const newToken = await tokens.grant(usr, req.clientToken);
         tokens.invalidate(req.accessToken, req.clientToken);
 
         const respObj: any = {
             clientToken: req.clientToken,
-            accessToken,
+            accessToken: newToken.accessToken,
         };
 
-        if (usr.selectedProfile) {
-            respObj.selectedProfile = usr.selectedProfile;
+        if (token.selectedProfile) {
+            respObj.selectedProfile = usr.availableProfiles.filter(p => p.id === newToken.selectedProfile)
         }
         if (req.requestUser) {
             respObj.user = {
@@ -242,8 +256,11 @@ export function create(db: UserDBridge, tokens: AccessTokenServer, middleware: P
     async function signout(req: SignoutRequest) {
         const usr = await db.findUserByName(req.username);
         if (!usr || usr.password != await middleware.process(req.password)) throw {
-            error: 'ForbiddenOperationException',
-            errorMessage: 'Invalid credentials. Invalid username or password.'
+            status: 400,
+            body: {
+                error: 'ForbiddenOperationException',
+                errorMessage: 'Invalid credentials. Invalid username or password.'
+            }
         }
 
         await tokens.invalidateUser(usr.id);

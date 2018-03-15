@@ -48,8 +48,35 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 }
 Object.defineProperty(exports, "__esModule", { value: true });
 var express_1 = __importDefault(require("express"));
+var uuid_1 = require("uuid");
 require("reflect-metadata");
 var parse_body_1 = require("./parse.body");
+// export interface GameProfile {
+//     id: string
+//     name: string
+//     legacy?: boolean
+// }
+var GameProfile = /** @class */ (function () {
+    function GameProfile(object) {
+        this.id = object.id;
+        this.name = object.name;
+        this.legacy = object.legacy;
+    }
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], GameProfile.prototype, "id", void 0);
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], GameProfile.prototype, "name", void 0);
+    __decorate([
+        parse_body_1.Optional(),
+        __metadata("design:type", Boolean)
+    ], GameProfile.prototype, "legacy", void 0);
+    return GameProfile;
+}());
+exports.GameProfile = GameProfile;
 var Agent = /** @class */ (function () {
     function Agent(object) {
         this.name = object.name;
@@ -95,88 +122,270 @@ var AuthenticateRequest = /** @class */ (function () {
     ], AuthenticateRequest.prototype, "requestUser", void 0);
     return AuthenticateRequest;
 }());
+var RefreshRequest = /** @class */ (function () {
+    function RefreshRequest(object) {
+        this.accessToken = object.accessToken;
+        this.clientToken = object.clientToken;
+        this.selectedProfile = new GameProfile(object.selectedProfile);
+        this.requestUser = object.requestUser;
+    }
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], RefreshRequest.prototype, "accessToken", void 0);
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], RefreshRequest.prototype, "clientToken", void 0);
+    __decorate([
+        parse_body_1.Optional(),
+        __metadata("design:type", GameProfile)
+    ], RefreshRequest.prototype, "selectedProfile", void 0);
+    __decorate([
+        parse_body_1.Optional(),
+        __metadata("design:type", Boolean)
+    ], RefreshRequest.prototype, "requestUser", void 0);
+    return RefreshRequest;
+}());
+var ValidateRequest = /** @class */ (function () {
+    function ValidateRequest(object) {
+        this.accessToken = object.accessToken;
+        this.clientToken = object.clientToken;
+    }
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], ValidateRequest.prototype, "accessToken", void 0);
+    __decorate([
+        parse_body_1.Optional(),
+        __metadata("design:type", String)
+    ], ValidateRequest.prototype, "clientToken", void 0);
+    return ValidateRequest;
+}());
+var SignoutRequest = /** @class */ (function () {
+    function SignoutRequest(object) {
+        this.username = object.username;
+        this.password = object.password;
+    }
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], SignoutRequest.prototype, "username", void 0);
+    __decorate([
+        parse_body_1.Require(),
+        __metadata("design:type", String)
+    ], SignoutRequest.prototype, "password", void 0);
+    return SignoutRequest;
+}());
 function create(db, tokens, middleware) {
     var app = express_1.default();
+    app.use(function (req, resp, next) {
+        if (req.header('Content-Type') !== 'application/json') {
+            resp.status(400)
+                .contentType('application/json;charset=UTF-8')
+                .send({
+                error: 'Unsupported Media Type',
+                errorMessage: 'The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method'
+            });
+        }
+        next();
+    });
     app.use(express_1.default.json());
+    app.get("*", function (req, resp) {
+        resp.status(400)
+            .contentType('application/json;charset=UTF-8')
+            .send({
+            error: 'Method Not Allowed',
+            errorMessage: 'The method specified in the request is not allowed for the resource identified by the request URI',
+        });
+    });
+    function handle(handler, reqType) {
+        app.post("/" + handler.name, function (req, resp) {
+            var reqObj = parse_body_1.parse(req.body, reqType);
+            if (!reqObj) {
+                resp.status(400).send({
+                    error: "IllegalArgumentException",
+                    errorMessage: "credentials is null"
+                });
+                return;
+            }
+            handler(reqObj).then(function (r) {
+                console.log(r);
+                resp.status(r.status)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(r.body);
+            }).catch(function (e) {
+                console.error(e);
+                resp.status(e.status)
+                    .contentType('application/json;charset=UTF-8')
+                    .send(e.body);
+            });
+        });
+    }
     function authenticate(req) {
         return __awaiter(this, void 0, void 0, function () {
-            var usr, decrp, clientToken, _a, accessToken, respObj, _b, targetId_1;
+            var usr, _a, _b, clientToken, token, respObj;
             return __generator(this, function (_c) {
                 switch (_c.label) {
-                    case 0:
-                        if (!req)
-                            throw {
-                                "error": "Unsupported Media Type",
-                                "errorMessage": "The server is refusing to service the request because the entity of the request is in a format not supported by the requested resource for the requested method	",
-                            };
-                        return [4 /*yield*/, db.findUserByName(req.username)];
+                    case 0: return [4 /*yield*/, db.findUserByName(req.username)];
                     case 1:
                         usr = _c.sent();
+                        _a = !usr;
+                        if (_a) return [3 /*break*/, 3];
+                        _b = usr.password;
                         return [4 /*yield*/, middleware.process(req.password)];
                     case 2:
-                        decrp = _c.sent();
-                        if (usr.password !== decrp)
-                            throw {
-                                error: 'ForbiddenOperationException',
-                                errorMessage: 'Invalid credentials. Invalid username or password.'
-                            };
-                        _a = req.clientToken;
-                        if (_a) return [3 /*break*/, 4];
-                        return [4 /*yield*/, tokens.genClientToken(usr)];
+                        _a = _b !== (_c.sent());
+                        _c.label = 3;
                     case 3:
-                        _a = (_c.sent());
-                        _c.label = 4;
+                        if (_a)
+                            throw {
+                                status: 400,
+                                body: {
+                                    error: 'ForbiddenOperationException',
+                                    errorMessage: 'Invalid credentials. Invalid username or password.'
+                                }
+                            };
+                        clientToken = req.clientToken || uuid_1.v4();
+                        return [4 /*yield*/, tokens.grant(usr, clientToken)];
                     case 4:
-                        clientToken = _a;
-                        return [4 /*yield*/, tokens.grantAccessToken(usr, clientToken)];
-                    case 5:
-                        accessToken = _c.sent();
-                        _b = {
-                            clientToken: clientToken
+                        token = _c.sent();
+                        respObj = {
+                            clientToken: clientToken,
+                            accessToken: token.accessToken,
                         };
-                        return [4 /*yield*/, tokens.grantAccessToken(usr, clientToken)];
-                    case 6:
-                        respObj = (_b.accessToken = _c.sent(),
-                            _b);
-                        if (!req.agent) return [3 /*break*/, 8];
-                        respObj.availableProfiles = usr.availableProfiles;
-                        return [4 /*yield*/, tokens.getProfileFromToken(accessToken)];
-                    case 7:
-                        targetId_1 = _c.sent();
-                        respObj.selectedProfile = usr.availableProfiles.filter(function (p) { return p.id === targetId_1; });
-                        _c.label = 8;
-                    case 8:
+                        if (req.agent) {
+                            respObj.availableProfiles = usr.availableProfiles;
+                            respObj.selectedProfile = usr.availableProfiles.filter(function (p) { return p.id === token.selectedProfile; });
+                        }
                         if (req.requestUser) {
                             respObj.user = {
                                 id: usr.id,
                                 properties: usr.properties
                             };
                         }
-                        return [2 /*return*/, respObj];
+                        return [2 /*return*/, { status: 200, body: respObj }];
                 }
             });
         });
     }
-    app.post('/authenticate', function (req, resp) {
-        authenticate(parse_body_1.parse(req.body, AuthenticateRequest))
-            .then(function (r) {
-            resp.status(200)
-                .contentType('application/json;charset=UTF-8')
-                .send(r);
-        })
-            .catch(function (e) {
-            resp.status(302)
-                .contentType('application/json;charset=UTF-8')
-                .send(e);
+    function refresh(req) {
+        return __awaiter(this, void 0, void 0, function () {
+            var token, usr, newToken, respObj;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, tokens.validate(req.accessToken, req.clientToken)];
+                    case 1:
+                        token = _a.sent();
+                        if (!token)
+                            throw {
+                                status: 400,
+                                body: {
+                                    error: 'ForbiddenOperationException',
+                                    errorMessage: 'Invalid token.'
+                                }
+                            };
+                        return [4 /*yield*/, db.findUserById(token.userId)];
+                    case 2:
+                        usr = _a.sent();
+                        return [4 /*yield*/, tokens.grant(usr, req.clientToken)];
+                    case 3:
+                        newToken = _a.sent();
+                        tokens.invalidate(req.accessToken, req.clientToken);
+                        respObj = {
+                            clientToken: req.clientToken,
+                            accessToken: newToken.accessToken,
+                        };
+                        if (token.selectedProfile) {
+                            respObj.selectedProfile = usr.availableProfiles.filter(function (p) { return p.id === newToken.selectedProfile; });
+                        }
+                        if (req.requestUser) {
+                            respObj.user = {
+                                id: usr.id,
+                                properties: usr.properties
+                            };
+                        }
+                        return [2 /*return*/, { status: 200, body: respObj }];
+                }
+            });
         });
-    });
-    app.post('/refresh', function (req, resp) {
-    });
-    app.post('/validate', function (req, resp) {
-    });
-    app.post('/signout', function (req, resp) {
-    });
-    app.post('/invalidate', function (req, resp) {
+    }
+    function validate(req) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, tokens.validate(req.accessToken, req.clientToken)];
+                    case 1:
+                        if (_a.sent())
+                            return [2 /*return*/, { status: 304, body: {} }];
+                        else
+                            throw {
+                                status: 400,
+                                body: {
+                                    "error": "ForbiddenOperationException",
+                                    errorMessage: "Invalid token.",
+                                }
+                            };
+                        return [2 /*return*/];
+                }
+            });
+        });
+    }
+    function invalidate(req) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, tokens.invalidate(req.accessToken, req.clientToken)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, { status: 304, body: {} }];
+                }
+            });
+        });
+    }
+    function signout(req) {
+        return __awaiter(this, void 0, void 0, function () {
+            var usr, _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0: return [4 /*yield*/, db.findUserByName(req.username)];
+                    case 1:
+                        usr = _c.sent();
+                        _a = !usr;
+                        if (_a) return [3 /*break*/, 3];
+                        _b = usr.password;
+                        return [4 /*yield*/, middleware.process(req.password)];
+                    case 2:
+                        _a = _b != (_c.sent());
+                        _c.label = 3;
+                    case 3:
+                        if (_a)
+                            throw {
+                                status: 400,
+                                body: {
+                                    error: 'ForbiddenOperationException',
+                                    errorMessage: 'Invalid credentials. Invalid username or password.'
+                                }
+                            };
+                        return [4 /*yield*/, tokens.invalidateUser(usr.id)];
+                    case 4:
+                        _c.sent();
+                        return [2 /*return*/, { status: 304, body: {} }];
+                }
+            });
+        });
+    }
+    handle(authenticate, AuthenticateRequest);
+    handle(refresh, RefreshRequest);
+    handle(validate, ValidateRequest);
+    handle(invalidate, ValidateRequest);
+    handle(signout, SignoutRequest);
+    app.post('*', function (req, resp) {
+        resp.status(400);
+        resp.send({
+            error: 'Not Found',
+            errorMessage: 'The server has not found anything matching the request URI'
+        });
     });
     return app;
 }

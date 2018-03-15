@@ -1,5 +1,8 @@
-import { User } from ".";
-export declare function createTokenServer(): void;
-export declare function grantAccessToken(user: User, clientToken: string): string;
-export declare function genClientToken(user: User): string;
-export declare function getProfileForToken(accessToken: string): string;
+import { User, AccessTokenServer, Token } from ".";
+export declare class SimpleAccessTokenServer implements AccessTokenServer {
+    private tokenMap;
+    grant(user: User, clientToken: string): Promise<Token>;
+    validate(accessToken: string, clientToken?: string | undefined): Promise<Token | undefined>;
+    invalidate(accessToken: string, clientToken?: string | undefined): Promise<void>;
+    invalidateUser(userId: string): Promise<void>;
+}
